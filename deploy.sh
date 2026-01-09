@@ -130,6 +130,10 @@ else
     echo_color "yellow" "--> Starting temporary Nginx for ACME challenge..."
     docker-compose -f docker-compose.prod.yml up -d nginx
 
+    # NEW: Wait for Nginx to be ready
+    echo_color "yellow" "--> Waiting for Nginx to initialize... (5 seconds)"
+    sleep 5
+
     # Run Certbot to get the certificate
     echo_color "yellow" "--> Requesting certificate for $DOMAIN_NAME..."
     

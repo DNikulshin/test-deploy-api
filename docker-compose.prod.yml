@@ -53,18 +53,12 @@ services:
       - ./nginx.prod.conf:/etc/nginx/conf.d/default.conf
       - certbot_www:/var/www/certbot:ro
       - certbot_conf:/etc/letsencrypt:ro
-    depends_on:
-      - api1
-      - api2
-      - api3
 
   certbot:
     image: certbot/certbot
     volumes:
       - certbot_www:/var/www/certbot:rw
       - certbot_conf:/etc/letsencrypt:rw
-    # The deploy script handles acquisition. A host cron job or a dedicated service is better for renewal.
-    # This command just keeps the container alive if you run `docker-compose up certbot`.
     command: "sleep infinity"
 
   database:
