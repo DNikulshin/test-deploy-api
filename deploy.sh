@@ -10,7 +10,7 @@
 # 1. Ask for your domain and email.
 # 2. Update the Nginx configuration file.
 # 3. Guide you to create/check the .env file with DB and JWT secrets.
-# 4. Obtain an SSL certificate using Certbot.
+# 4. Obtain an SSL certificate using Certbot if it doesn't exist.
 # 5. Start the database service.
 # 6. Apply Prisma database migrations.
 # 7. Launch the full application stack (APIs, Nginx).
@@ -112,44 +112,50 @@ read -p "Please check your .env file. Press [Enter] to continue..."
 echo_color "yellow" "\n--> Stopping any running services and removing old data volumes..."
 docker-compose -f docker-compose.prod.yml down -v --remove-orphans
 
-# --- Step 6: Obtain SSL Certificate ---
-echo_color "yellow" "\n--> Preparing to obtain SSL certificate..."
-docker-compose -f docker-compose.prod.yml up -d nginx
+# --- Step 6: Obtain SSL Certificate (if needed) ---
+echo_color "yellow" "\n--> Checking for existing SSL certificate..."
 
-echo_color "yellow" "--> Requesting certificate for $DOMAIN_NAME..."
-
-# Temporarily disable exit-on-error to handle Certbot's exit codes
+# Use a quiet docker-compose run to check for the certificate directory
 set +e
-docker-compose -f docker-compose.prod.yml run --rm certbot certonly \
-    --webroot --webroot-path /var/www/certbot/ \
-    -d "$DOMAIN_NAME" --email "$EMAIL_ADDRESS" \
-    --agree-tos --no-eff-email --force-renewal
-CERTBOT_EXIT_CODE=$?
-set -e # Re-enable exit-on-error
+docker-compose -f docker-compose.prod.yml run --rm --entrypoint "" certbot test -d "/etc/letsencrypt/live/$DOMAIN_NAME" > /dev/null 2>&1
+CERT_EXISTS_CODE=$?
+set -e
 
-if [ $CERTBOT_EXIT_CODE -ne 0 ]; then
-    echo_color "yellow" "Certbot command finished with a non-zero exit code: $CERTBOT_EXIT_CODE."
-    echo_color "yellow" "This is often okay if a certificate already exists. Checking..."
+if [ $CERT_EXISTS_CODE -eq 0 ]; then
+    echo_color "green" "An existing SSL certificate was found. Skipping acquisition step."
+else
+    echo_color "yellow" "No certificate found. Attempting to obtain one from Let's Encrypt..."
+
+    # Start nginx for the webroot challenge
+    echo_color "yellow" "--> Starting temporary Nginx for ACME challenge..."
+    docker-compose -f docker-compose.prod.yml up -d nginx
+
+    # Run Certbot to get the certificate
+    echo_color "yellow" "--> Requesting certificate for $DOMAIN_NAME..."
     
     set +e
-    # Hide noisy output from this check
-    docker-compose -f docker-compose.prod.yml run --rm --entrypoint "" certbot test -d "/etc/letsencrypt/live/$DOMAIN_NAME" > /dev/null 2>&1
-    CHECK_EXIT_CODE=$?
+    docker-compose -f docker-compose.prod.yml run --rm certbot certonly \
+        --webroot --webroot-path /var/www/certbot/ \
+        -d "$DOMAIN_NAME" --email "$EMAIL_ADDRESS" \
+        --agree-tos --no-eff-email --non-interactive
+    CERTBOT_EXIT_CODE=$?
     set -e
 
-    if [ $CHECK_EXIT_CODE -ne 0 ]; then
-        echo_color "red" "CRITICAL: Certbot failed and no existing certificate was found."
-        echo_color "red" "Please check the logs above for the exact error from Certbot."
-        echo_color "red" "Most common reason: Your domain's DNS record is not yet pointing to this server."
-        echo_color "red" "Aborting script."
-        docker-compose -f docker-compose.prod.yml down # Clean up
+    # Stop the temporary nginx container, we don't need it anymore
+    echo_color "yellow" "--> Shutting down temporary Nginx..."
+    docker-compose -f docker-compose.prod.yml down
+
+    # If Certbot failed, it's a critical error now because we know no cert existed before
+    if [ $CERTBOT_EXIT_CODE -ne 0 ]; then
+        echo_color "red" "CRITICAL: Certbot failed to obtain a new certificate."
+        echo_color "red" "Please review the output above for error details."
+        echo_color "red" "Common cause: Your domain's DNS A record may not be pointing to this server yet."
+        echo_color "red" "Aborting deployment."
         exit 1
     fi
-    echo_color "green" "An existing certificate was found. Proceeding with deployment."
+    
+    echo_color "green" "Successfully obtained and configured SSL certificate."
 fi
-
-echo_color "green" "SSL certificate is in place."
-docker-compose -f docker-compose.prod.yml down
 
 # --- Step 7: Apply Database Migrations ---
 echo_color "yellow" "\n--> Starting database service to apply migrations..."
