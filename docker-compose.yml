@@ -1,0 +1,49 @@
+
+services:
+  main-db:
+    image: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - main-db:/var/lib/postgresql
+    networks:
+      - app-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Docker-compose автоматически подхватит эти переменные из вашего .env файла
+    # и передаст их в контейнер.
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@main-db:5432/postgres
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+    depends_on:
+      - main-db
+    networks:
+      - app-network
+    deploy:
+      replicas: 3
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - api
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  main-db:
