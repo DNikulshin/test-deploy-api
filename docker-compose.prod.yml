@@ -1,8 +1,6 @@
-
 version: '3.8'
 
 services:
-  # Три инстанса вашего API
   api1:
     build:
       context: .
@@ -10,7 +8,6 @@ services:
     restart: always
     env_file:
       - ./.env
-    # Переопределяем DATABASE_URL для использования внутри Docker-сети
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?sslmode=prefer
     expose:
@@ -25,7 +22,6 @@ services:
     restart: always
     env_file:
       - ./.env
-    # Переопределяем DATABASE_URL для использования внутри Docker-сети
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?sslmode=prefer
     expose:
@@ -40,7 +36,6 @@ services:
     restart: always
     env_file:
       - ./.env
-    # Переопределяем DATABASE_URL для использования внутри Docker-сети
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?sslmode=prefer
     expose:
@@ -48,7 +43,6 @@ services:
     depends_on:
       - database
 
-  # Nginx как обратный прокси и балансировщик
   nginx:
     image: nginx:latest
     restart: always
@@ -57,32 +51,31 @@ services:
       - "443:443"
     volumes:
       - ./nginx.prod.conf:/etc/nginx/conf.d/default.conf
-      - ./certbot/www:/var/www/certbot/:ro
-      - ./certbot/conf/:/etc/nginx/ssl/:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
     depends_on:
       - api1
       - api2
       - api3
 
-  # Certbot для SSL-сертификатов
   certbot:
     image: certbot/certbot
-    restart: unless-stopped
     volumes:
-      - ./certbot/www:/var/www/certbot/:rw
-      - ./certbot/conf/:/etc/letsencrypt/:rw
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+      - certbot_www:/var/www/certbot:rw
+      - certbot_conf:/etc/letsencrypt:rw
+    # The deploy script handles acquisition. A host cron job or a dedicated service is better for renewal.
+    # This command just keeps the container alive if you run `docker-compose up certbot`.
+    command: "sleep infinity"
 
-  # --- НОВЫЙ СЕРВИС БАЗЫ ДАННЫХ ---
   database:
-    image: postgres:15-alpine # Используем официальный образ Postgres
+    image: postgres:15-alpine
     restart: always
     volumes:
-      - pgdata:/var/lib/postgresql/data # <-- Данные будут храниться в volume 'pgdata'
+      - pgdata:/var/lib/postgresql/data
     env_file:
-      - ./.env # <-- Пароли и имя БД берутся из .env
+      - ./.env
 
-# --- НОВЫЙ РАЗДЕЛ VOLUMES ---
-# Определяем volume для хранения данных БД
 volumes:
   pgdata:
+  certbot_conf:
+  certbot_www:
