@@ -98,7 +98,14 @@ docker-compose -f docker-compose.certbot.yml down -v --remove-orphans
 # --- Step 6: Obtain SSL Certificate (if needed) ---
 echo_color "yellow" "\n--> Checking for existing SSL certificate..."
 
-if [ -d "certbot_conf/live/$DOMAIN_NAME" ]; then
+# We check for the certificate by running a test command inside a temporary container
+# that has the certbot_conf volume mounted.
+set +e # Allow the next command to fail without exiting the script
+docker-compose -f docker-compose.prod.yml run --rm --entrypoint "" certbot test -d "/etc/letsencrypt/live/$DOMAIN_NAME"
+CERT_EXISTS_CODE=$?
+set -e # Re-enable exit on error
+
+if [ $CERT_EXISTS_CODE -eq 0 ]; then
     echo_color "green" "An existing SSL certificate was found. Skipping acquisition step."
 else
     echo_color "yellow" "No certificate found. Attempting to obtain one from Let's Encrypt..."
@@ -107,20 +114,24 @@ else
     docker-compose -f docker-compose.certbot.yml up -d
 
     echo_color "yellow" "--> Requesting certificate for $DOMAIN_NAME..."
-
-    # The Certbot command is now run within its compose file for clarity
     docker-compose -f docker-compose.certbot.yml run --rm certbot certonly \
         --webroot --webroot-path /var/www/certbot \
         -d "$DOMAIN_NAME" --email "$EMAIL_ADDRESS" \
         --agree-tos --no-eff-email --non-interactive
 
-    echo_color "yellow" "--> Shutting down temporary services..."
-    docker-compose -f docker-compose.certbot.yml down -v
+    echo_color "yellow" "--> Shutting down temporary services (but keeping volumes)..."
+    # We use `down` WITHOUT `-v` to preserve the certbot_conf and certbot_www volumes
+    docker-compose -f docker-compose.certbot.yml down
 
-    # Check again if the certificate was created successfully
-    if [ ! -d "certbot_conf/live/$DOMAIN_NAME" ]; then
-        echo_color "red" "CRITICAL: Certbot failed to obtain a new certificate." >&2
-        echo_color "red" "Please review the output above. Common cause: DNS A record for $DOMAIN_NAME is not pointing to this server's IP." >&2
+    # Check again using the same reliable method to ensure the certificate was created
+    set +e
+    docker-compose -f docker-compose.prod.yml run --rm --entrypoint "" certbot test -d "/etc/letsencrypt/live/$DOMAIN_NAME"
+    CERT_CHECK_CODE=$?
+    set -e
+
+    if [ $CERT_CHECK_CODE -ne 0 ]; then
+        echo_color "red" "CRITICAL: Certbot ran, but the certificate directory could not be found." >&2
+        echo_color "red" "This is an unexpected error. Please check the logs above." >&2
         exit 1
     fi
 
@@ -134,8 +145,13 @@ docker-compose -f docker-compose.prod.yml up --build -d --remove-orphans
 # --- Final Message ---
 echo_color "green" "\n======================================================="
 echo_color "green" "  🚀 DEPLOYMENT COMPLETE! 🚀"
+
 echo_color "green" "Your application stack is now running."
+
 echo_color "green" "Access your API at: https://$DOMAIN_NAME"
+
 echo_color "green" "\nTo see logs, run: docker-compose -f docker-compose.prod.yml logs -f"
+
 echo_color "green" "To stop, run: docker-compose -f docker-compose.prod.yml down"
+
 echo_color "green" "======================================================="
