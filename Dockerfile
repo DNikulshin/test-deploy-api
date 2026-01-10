@@ -21,12 +21,6 @@ RUN npm run build
 # 2. Финальный образ (Production Stage)
 FROM node:20-alpine
 
-# Объявляем аргумент сборки для DATABASE_URL
-ARG DATABASE_URL
-# Устанавливаем переменную окружения из аргумента сборки
-ENV DATABASE_URL=${DATABASE_URL}
-
-
 WORKDIR /usr/src/app
 
 # Копируем только необходимые для запуска артефакты из стадии сборки
@@ -36,9 +30,7 @@ COPY --from=builder /usr/src/app/dist ./dist
 
 # Prisma также требует наличия файла схемы во время выполнения
 COPY --from=builder /usr/src/app/prisma ./prisma
-
-# Запускаем миграции
-RUN npx prisma migrate deploy
+COPY --from=builder /usr/src/app/package.json ./
 
 # Открываем порт, который слушает NestJS внутри контейнера
 EXPOSE 3000

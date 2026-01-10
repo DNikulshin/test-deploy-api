@@ -5,8 +5,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?sslmode=prefer
     restart: always
     env_file:
       - ./.env
@@ -14,13 +12,13 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?sslmode=prefer
     depends_on:
       - database
+    command: >
+      sh -c "npx prisma migrate deploy && node dist/src/main.js"
 
   api2:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?sslmode=prefer
     restart: always
     env_file:
       - ./.env
@@ -28,13 +26,13 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?sslmode=prefer
     depends_on:
       - database
+    command: >
+      sh -c "npx prisma migrate deploy && node dist/src/main.js"
 
   api3:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?sslmode=prefer
     restart: always
     env_file:
       - ./.env
@@ -42,6 +40,8 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?sslmode=prefer
     depends_on:
       - database
+    command: >
+      sh -c "npx prisma migrate deploy && node dist/src/main.js"
 
   nginx:
     image: nginx:latest
