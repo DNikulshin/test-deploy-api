@@ -12,6 +12,8 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?sslmode=prefer
     depends_on:
       - database
+    expose:
+      - "3000"
     command: >
       sh -c "npx prisma migrate deploy && npm run db:seed:admin && node dist/src/main.js"
 
@@ -26,6 +28,8 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?sslmode=prefer
     depends_on:
       - database
+    expose:
+      - "3000"
     command: >
       sh -c "npx prisma migrate deploy && npm run db:seed:admin && node dist/src/main.js"
 
@@ -40,6 +44,8 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}?sslmode=prefer
     depends_on:
       - database
+    expose:
+      - "3000"
     command: >
       sh -c "npx prisma migrate deploy && npm run db:seed:admin && node dist/src/main.js"
 
