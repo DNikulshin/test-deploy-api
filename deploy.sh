@@ -131,8 +131,7 @@ else
     echo_color "yellow" "--> Requesting certificate for $DOMAIN_NAME..."
 
     set +e
-    # Use --dns flag to force a reliable resolver
-    docker-compose -f docker-compose.prod.yml run --rm --dns 8.8.8.8 certbot certonly \
+    docker-compose -f docker-compose.prod.yml run --rm certbot certonly \
         --webroot --webroot-path /var/www/certbot/ \
         -d "$DOMAIN_NAME" --email "$EMAIL_ADDRESS" \
         --agree-tos --no-eff-email --non-interactive
