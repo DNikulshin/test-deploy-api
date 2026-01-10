@@ -14,6 +14,8 @@ services:
       - "3000"
     depends_on:
       - database
+    command: >
+      sh -c "npx prisma migrate deploy && node dist/src/main.js"
 
   api2:
     build:
@@ -28,6 +30,8 @@ services:
       - "3000"
     depends_on:
       - database
+    command: >
+      sh -c "npx prisma migrate deploy && node dist/src/main.js"
 
   api3:
     build:
@@ -42,6 +46,8 @@ services:
       - "3000"
     depends_on:
       - database
+    command: >
+      sh -c "npx prisma migrate deploy && node dist/src/main.js"
 
   nginx:
     image: nginx:latest

@@ -11,9 +11,8 @@
 # 2. Update the Nginx configuration file.
 # 3. Guide you to create/check the .env file with DB and JWT secrets.
 # 4. Obtain an SSL certificate using Certbot if it doesn't exist.
-# 5. Start the database service.
-# 6. Apply Prisma database migrations.
-# 7. Launch the full application stack (APIs, Nginx).
+# 5. Launch the full application stack (APIs, Nginx, Database).
+#    Database migrations will be applied automatically on container startup.
 #
 # Prerequisites:
 # - Docker and Docker Compose must be installed.
@@ -139,7 +138,7 @@ else
     
     set +e
     docker-compose -f docker-compose.prod.yml run --rm certbot certonly \
-        --webroot --webroot-path /var/wslww/certbot/ \
+        --webroot --webroot-path /var/www/certbot/ \
         -d "$DOMAIN_NAME" --email "$EMAIL_ADDRESS" \
         --agree-tos --no-eff-email --non-interactive
     CERTBOT_EXIT_CODE=$?
@@ -161,21 +160,9 @@ else
     echo_color "green" "Successfully obtained and configured SSL certificate."
 fi
 
-# --- Step 7: Apply Database Migrations ---
-echo_color "yellow" "\n--> Starting database service to apply migrations..."
-docker-compose -f docker-compose.prod.yml up -d database
-
-echo_color "yellow" "--> Waiting for the database to initialize... (10 seconds)"
-sleep 10
-
-echo_color "yellow" "--> Applying Prisma migrations..."
-docker-compose -f docker-compose.prod.yml run --rm api1 npx prisma migrate deploy
-
-echo_color "green" "Database migrations applied successfully."
-
-
-# --- Step 8: Launch the Full Application ---
+# --- Step 7: Launch the Full Application ---
 echo_color "yellow" "\n--> Building and launching the final application stack..."
+echo_color "yellow" "(Database migrations will be applied automatically on startup)"
 docker-compose -f docker-compose.prod.yml up --build -d --remove-orphans
 
 # --- Final Message ---
