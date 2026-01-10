@@ -131,15 +131,15 @@ else
     docker-compose -f docker-compose.prod.yml up -d nginx
 
     # NEW: Wait for Nginx to be ready
-    echo_color "yellow" "--> Waiting for Nginx to initialize... (5 seconds)"
-    sleep 5
+    echo_color "yellow" "--> Waiting for Nginx to initialize... (20 seconds)"
+    sleep 20
 
     # Run Certbot to get the certificate
     echo_color "yellow" "--> Requesting certificate for $DOMAIN_NAME..."
     
     set +e
     docker-compose -f docker-compose.prod.yml run --rm certbot certonly \
-        --webroot --webroot-path /var/www/certbot/ \
+        --webroot --webroot-path /var/wslww/certbot/ \
         -d "$DOMAIN_NAME" --email "$EMAIL_ADDRESS" \
         --agree-tos --no-eff-email --non-interactive
     CERTBOT_EXIT_CODE=$?

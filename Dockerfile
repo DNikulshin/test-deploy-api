@@ -31,6 +31,9 @@ COPY --from=builder /usr/src/app/dist ./dist
 # Prisma также требует наличия файла схемы во время выполнения
 COPY --from=builder /usr/src/app/prisma ./prisma
 
+# Запускаем миграции
+RUN npx prisma migrate deploy
+
 # Открываем порт, который слушает NestJS внутри контейнера
 EXPOSE 3000
 

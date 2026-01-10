@@ -8,7 +8,7 @@ upstream nestjs_api {
 # Сервер для HTTP, который будет перенаправлять всё на HTTPS
 server {
     listen 80;
-    server_name nikulshin-dev.online;
+    server_name your-domain.com;
 
     # Блок для проверки домена от Certbot
     location /.well-known/acme-challenge/ {
@@ -23,11 +23,11 @@ server {
 # Основной сервер для HTTPS
 server {
     listen 443 ssl;
-    server_name nikulshin-dev.online;
+    server_name your-domain.com;
 
     # Пути к SSL-сертификатам
-    ssl_certificate /etc/letsencrypt/live/nikulshin-dev.online/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/nikulshin-dev.online/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
 
     # Настройки SSL
     include /etc/letsencrypt/options-ssl-nginx.conf;
