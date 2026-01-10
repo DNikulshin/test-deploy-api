@@ -6,6 +6,9 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: always
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     env_file:
       - ./.env
     environment:
@@ -22,6 +25,9 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: always
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     env_file:
       - ./.env
     environment:
@@ -38,6 +44,9 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: always
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     env_file:
       - ./.env
     environment:
@@ -52,6 +61,9 @@ services:
   nginx:
     image: nginx:latest
     restart: always
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     ports:
       - "80:80"
       - "443:443"
@@ -62,6 +74,9 @@ services:
 
   certbot:
     image: certbot/certbot
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     volumes:
       - certbot_www:/var/www/certbot:rw
       - certbot_conf:/etc/letsencrypt:rw
@@ -70,6 +85,9 @@ services:
   database:
     image: postgres:15-alpine
     restart: always
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     volumes:
       - pgdata:/var/lib/postgresql/data
     env_file:
