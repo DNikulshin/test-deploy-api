@@ -124,17 +124,15 @@ else
     echo_color "yellow" "--> Starting temporary Nginx for ACME challenge..."
     docker-compose -f docker-compose.prod.yml up -d nginx
 
-    # NEW DIAGNOSTIC STEP
     echo_color "yellow" "--> Waiting 5 seconds for Nginx to initialize..."
     sleep 5
-    echo_color "yellow" "--> [DIAGNOSTIC] Checking temporary Nginx container logs..."
-    docker-compose -f docker-compose.prod.yml logs --tail="40" nginx || echo_color "red" "Could not retrieve Nginx logs."
 
     # Run Certbot to get the certificate
     echo_color "yellow" "--> Requesting certificate for $DOMAIN_NAME..."
 
     set +e
-    docker-compose -f docker-compose.prod.yml run --rm certbot certonly \
+    # Use --dns flag to force a reliable resolver
+    docker-compose -f docker-compose.prod.yml run --rm --dns 8.8.8.8 certbot certonly \
         --webroot --webroot-path /var/www/certbot/ \
         -d "$DOMAIN_NAME" --email "$EMAIL_ADDRESS" \
         --agree-tos --no-eff-email --non-interactive
@@ -149,7 +147,7 @@ else
     if [ $CERTBOT_EXIT_CODE -ne 0 ]; then
         echo_color "red" "CRITICAL: Certbot failed to obtain a new certificate."
         echo_color "red" "Please review the output above for error details."
-        echo_color "red" "Common cause: The temporary Nginx container failed to start. Check the logs above."
+        echo_color "red" "Common cause: Host DNS issues are preventing Certbot from reaching Let\'s Encrypt servers."
         echo_color "red" "Aborting deployment."
         exit 1
     fi
