@@ -8,7 +8,7 @@
 #
 # It will:
 # 1. Ask for your domain and email.
-# 2. Update all necessary configuration files.
+# 2. Generate configuration files from templates.
 # 3. Guide you to create/check the .env file.
 # 4. Obtain an SSL certificate using a secure, temporary Nginx instance.
 # 5. Launch the full application stack (APIs, Nginx, Database).
@@ -50,21 +50,17 @@ if [ -z "$DOMAIN_NAME" ] || [ -z "$EMAIL_ADDRESS" ]; then
 fi
 echo_color "green" "Configuration received. Using clean domain: $DOMAIN_NAME"
 
-# --- Step 3: Configure Files ---
-echo_color "yellow" "\n--> Updating configuration files with your domain..."
+# --- Step 3: Configure Files from Templates ---
+echo_color "yellow" "\n--> Generating configuration files from templates..."
 
-# Create backups on first run
-[ ! -f "nginx.prod.conf.bak" ] && cp nginx.prod.conf nginx.prod.conf.bak
-[ ! -f "nginx.certbot.conf.bak" ] && cp nginx.certbot.conf nginx.certbot.conf.bak
+cp nginx.prod.template nginx.prod.conf
+cp nginx.certbot.template nginx.certbot.conf
 
-# Restore from backups
-cp nginx.prod.conf.bak nginx.prod.conf
-cp nginx.certbot.conf.bak nginx.certbot.conf
-
+# Using a different delimiter for sed to avoid issues with file paths
 sed -i "s|your-domain.com|$DOMAIN_NAME|g" nginx.prod.conf
 sed -i "s|your-domain.com|$DOMAIN_NAME|g" nginx.certbot.conf
 
-echo_color "green" "Nginx configurations updated."
+echo_color "green" "Nginx configurations generated."
 
 # --- Step 4: Check for .env file ---
 if [ ! -f ".env" ]; then
@@ -92,18 +88,17 @@ read -p "Please check your .env file and press [Enter] to continue..."
 
 # --- Step 5: Clean up previous runs ---
 echo_color "yellow" "\n--> Stopping any running services and removing old data volumes..."
-docker-compose -f docker-compose.prod.yml down -v --remove-orphans
-docker-compose -f docker-compose.certbot.yml down -v --remove-orphans
+docker-compose -f docker-compose.prod.yml down -v --remove-orphans || true
+docker-compose -f docker-compose.certbot.yml down -v --remove-orphans || true
 
 # --- Step 6: Obtain SSL Certificate (if needed) ---
 echo_color "yellow" "\n--> Checking for existing SSL certificate..."
 
-# We check for the certificate by running a test command inside a temporary container
-# that has the certbot_conf volume mounted.
-set +e # Allow the next command to fail without exiting the script
+# We check by looking for the directory inside the certbot volume via a temporary container
+set +e
 docker-compose -f docker-compose.prod.yml run --rm --entrypoint "" certbot test -d "/etc/letsencrypt/live/$DOMAIN_NAME"
 CERT_EXISTS_CODE=$?
-set -e # Re-enable exit on error
+set -e
 
 if [ $CERT_EXISTS_CODE -eq 0 ]; then
     echo_color "green" "An existing SSL certificate was found. Skipping acquisition step."
@@ -119,11 +114,10 @@ else
         -d "$DOMAIN_NAME" --email "$EMAIL_ADDRESS" \
         --agree-tos --no-eff-email --non-interactive
 
-    echo_color "yellow" "--> Shutting down temporary services (but keeping volumes)..."
-    # We use `down` WITHOUT `-v` to preserve the certbot_conf and certbot_www volumes
+    echo_color "yellow" "--> Shutting down temporary services (keeping volumes)..."
     docker-compose -f docker-compose.certbot.yml down
 
-    # Check again using the same reliable method to ensure the certificate was created
+    # Check again to ensure the certificate was created successfully
     set +e
     docker-compose -f docker-compose.prod.yml run --rm --entrypoint "" certbot test -d "/etc/letsencrypt/live/$DOMAIN_NAME"
     CERT_CHECK_CODE=$?
@@ -131,7 +125,6 @@ else
 
     if [ $CERT_CHECK_CODE -ne 0 ]; then
         echo_color "red" "CRITICAL: Certbot ran, but the certificate directory could not be found." >&2
-        echo_color "red" "This is an unexpected error. Please check the logs above." >&2
         exit 1
     fi
 
@@ -145,13 +138,8 @@ docker-compose -f docker-compose.prod.yml up --build -d --remove-orphans
 # --- Final Message ---
 echo_color "green" "\n======================================================="
 echo_color "green" "  🚀 DEPLOYMENT COMPLETE! 🚀"
-
 echo_color "green" "Your application stack is now running."
-
 echo_color "green" "Access your API at: https://$DOMAIN_NAME"
-
 echo_color "green" "\nTo see logs, run: docker-compose -f docker-compose.prod.yml logs -f"
-
 echo_color "green" "To stop, run: docker-compose -f docker-compose.prod.yml down"
-
 echo_color "green" "======================================================="
