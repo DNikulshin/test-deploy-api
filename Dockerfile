@@ -21,6 +21,12 @@ RUN npm run build
 # 2. Финальный образ (Production Stage)
 FROM node:20-alpine
 
+# Объявляем аргумент сборки для DATABASE_URL
+ARG DATABASE_URL
+# Устанавливаем переменную окружения из аргумента сборки
+ENV DATABASE_URL=${DATABASE_URL}
+
+
 WORKDIR /usr/src/app
 
 # Копируем только необходимые для запуска артефакты из стадии сборки
