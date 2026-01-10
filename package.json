@@ -23,11 +23,11 @@
     "prisma:dev:generate": "dotenv -e .env.development -- prisma generate",
     "prisma:prod:generate": "dotenv -e .env.production -- prisma generate",
     "db:seed:all": "dotenv -e .env.development -- ts-node prisma/seed.ts",
-    "db:seed:admin": "ts-node prisma/seed-admin.ts",
+    "db:seed:admin": "node dist/prisma/seed-admin.js",
     "test:qa": "node test-qa.js"
   },
   "prisma": {
-    "seed": "dotenv -e .env.development -- ts-node prisma/seed.ts"
+    "seed": "node dist/prisma/seed.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
