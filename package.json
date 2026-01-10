@@ -24,6 +24,7 @@
     "prisma:prod:generate": "dotenv -e .env.production -- prisma generate",
     "db:seed:all": "dotenv -e .env.development -- ts-node prisma/seed.ts",
     "db:seed:admin": "node dist/prisma/seed-admin.js",
+    "prisma:seed": "npm run db:seed:all",
     "test:qa": "node test-qa.js"
   },
   "prisma": {

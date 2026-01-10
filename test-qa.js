@@ -5,7 +5,7 @@ console.log('Setup, full test suite, and teardown are in this file.');
 console.log('==================================================');
 
 const DOCKER_SERVICE_NAME = 'main-db';
-// Изменено: Убран префикс /api и используется существующий публичный эндпоинт
+const DOCKER_COMPOSE_FILE = 'docker-compose.dev.yml';
 const HEALTH_CHECK_URL = 'http://localhost:3000/category'; 
 const MAX_HEALTH_RETRIES = 30;
 
@@ -25,12 +25,12 @@ async function main() {
   const { CookieJar } = await import('tough-cookie');
   const { wrapper } = await import('axios-cookiejar-support');
 
-  // Создаем HTTP-клиенты для разных ролей и устройств
-  const userClient = wrapper(axios.create({ jar: new CookieJar() })); // Основной клиент пользователя
-  const adminClient = wrapper(axios.create({ jar: new CookieJar() })); // Клиент администратора
-  const secondDeviceClient = wrapper(axios.create({ jar: new CookieJar() })); // Клиент для второго устройства
+  const userClient = wrapper(axios.create({ jar: new CookieJar() }));
+  const adminClient = wrapper(axios.create({ jar: new CookieJar() }));
+  const secondDeviceClient = wrapper(axios.create({ jar: new CookieJar() }));
   
   let serverProcess;
+  const dockerComposeArgs = ['-f', DOCKER_COMPOSE_FILE];
 
   const runCommand = async (command, args, options = {}) => {
     log(`Выполнение: ${command} ${args.join(' ')}`);
@@ -63,14 +63,13 @@ async function main() {
   process.on('SIGTERM', cleanup);
 
   try {
-    // 1. Окружение
     logSeparator();
     log('Остановка и удаление Docker-контейнеров...');
-    await runCommand('docker-compose', ['down', '-v']);
+    await runCommand('docker-compose', [...dockerComposeArgs, 'down', '-v']);
 
     logSeparator();
     log('Запуск контейнера базы данных...');
-    if (!(await runCommand('docker-compose', ['up', '-d', DOCKER_SERVICE_NAME])).success) {
+    if (!(await runCommand('docker-compose', [...dockerComposeArgs, 'up', '-d', DOCKER_SERVICE_NAME])).success) {
       throw new Error('Не удалось запустить БД.');
     }
 
@@ -78,7 +77,7 @@ async function main() {
     log('Ожидание готовности Postgres...');
     let dbReady = false;
     for (let i = 0; i < 30; i++) {
-      if ((await runDbCheckCommand('docker-compose', ['exec', '-T', DOCKER_SERVICE_NAME, 'pg_isready', '-U', 'postgres', '-q'])).success) {
+      if ((await runDbCheckCommand('docker-compose', [...dockerComposeArgs, 'exec', '-T', DOCKER_SERVICE_NAME, 'pg_isready', '-U', 'postgres', '-q'])).success) {
         dbReady = true;
         break;
       }
@@ -121,12 +120,10 @@ async function main() {
     if (!apiReady) throw new Error('API не стало доступным.');
     log('API доступно.');
 
-    // 2. ЗАПУСК QA-ТЕСТОВ
     logSeparator();
     log('Запуск полного QA-тестирования...');
     await runFullQATests(userClient, adminClient, secondDeviceClient);
 
-    // 3. Успешное завершение
     testSuccess('\nВсе тесты успешно пройдены!');
     process.exit(0);
 
@@ -152,7 +149,6 @@ async function runFullQATests(userClient, adminClient, secondDeviceClient) {
     const testRequest = async (description, { client, method, path, data, expectedStatus, headers = {} }) => {
         testLog(description);
         try {
-            // Изменено: Убран префикс /api
             const response = await client({
                 method,
                 url: `http://localhost:3000${path}`,
@@ -171,7 +167,6 @@ async function runFullQATests(userClient, adminClient, secondDeviceClient) {
         }
     };
     
-    // --- ЧАСТЬ 1: РЕГИСТРАЦИЯ И ВХОД ---
     testStepHeader('ЧАСТЬ 1: РЕГИСТРАЦИЯ И ВХОД');
     await testRequest('Регистрация нового пользователя', {
         client: userClient, method: 'POST', path: '/auth/register', data: userPayload, expectedStatus: 201
@@ -181,24 +176,19 @@ async function runFullQATests(userClient, adminClient, secondDeviceClient) {
     });
     accessToken = loginResponse.accessToken;
 
-    // --- ЧАСТЬ 2: АДМИН ---
     testStepHeader('ЧАСТЬ 2: ВХОД АДМИНИСТРАТОРА И СМЕНА ПАРОЛЯ');
-    // Изменено: email администратора
     const adminLoginInitial = await testRequest('Первичный вход администратора', {
         client: adminClient, method: 'POST', path: '/auth/login', data: { email: 'admin@admin.ru', password: 'admin123' }, expectedStatus: 200
     });
-    // Изменено: currentPassword администратора
     await testRequest('Смена пароля администратора', {
         client: adminClient, method: 'PATCH', path: '/users/me/password', headers: { Authorization: `Bearer ${adminLoginInitial.accessToken}` },
         data: { currentPassword: 'admin123', newPassword: 'newPassword123', newPasswordConfirmation: 'newPassword123' }, expectedStatus: 200
     });
-    // Изменено: email администратора
     const adminLoginFinal = await testRequest('Вход администратора с новым паролем', {
         client: adminClient, method: 'POST', path: '/auth/login', data: { email: 'admin@admin.ru', password: 'newPassword123' }, expectedStatus: 200
     });
     adminAccessToken = adminLoginFinal.accessToken;
 
-    // --- ЧАСТЬ 3: УПРАВЛЕНИЕ КАТЕГОРИЯМИ (АДМИН) ---
     testStepHeader('ЧАСТЬ 3: УПРАВЛЕНИЕ КАТЕГОРИЯМИ (АДМИН)');
     newCategoryByAdmin = await testRequest('Создание категории', {
         client: adminClient, method: 'POST', path: '/category', headers: { Authorization: `Bearer ${adminAccessToken}` },
@@ -215,7 +205,6 @@ async function runFullQATests(userClient, adminClient, secondDeviceClient) {
         headers: { Authorization: `Bearer ${adminAccessToken}` }, data: { name: 'Updated Test Category' }, expectedStatus: 200
     });
 
-    // --- ЧАСТЬ 4: УПРАВЛЕНИЕ ПРОДУКТАМИ (АДМИН) ---
     testStepHeader('ЧАСТЬ 4: УПРАВЛЕНИЕ ПРОДУКТАМИ (АДМИН)');
     newProductByAdmin = await testRequest('Создание продукта', {
         client: adminClient, method: 'POST', path: '/products', headers: { Authorization: `Bearer ${adminAccessToken}` },
@@ -226,7 +215,6 @@ async function runFullQATests(userClient, adminClient, secondDeviceClient) {
         headers: { Authorization: `Bearer ${adminAccessToken}` }, data: { price: 150 }, expectedStatus: 200
     });
 
-    // --- ЧАСТЬ 5: ПРОДУКТЫ И КОРЗИНА (ПОЛЬЗОВАТЕЛЬ) ---
     testStepHeader('ЧАСТЬ 5: ПРОДУКТЫ И КОРЗИНА (ПОЛЬЗОВАТЕЛЬ)');
     const productsFiltered = await testRequest('Получение списка продуктов (с фильтром по категории)', { client: userClient, method: 'GET', path: `/products?categoryId=${newCategoryByAdmin.id}`, expectedStatus: 200 });
     if (productsFiltered.length !== 1 || productsFiltered[0].id !== newProductByAdmin.id) {
@@ -251,7 +239,6 @@ async function runFullQATests(userClient, adminClient, secondDeviceClient) {
         data: { productId: productToTest.id, quantity: 2 }, expectedStatus: 200
     });
     
-    // --- ЧАСТЬ 6: ЗАКАЗЫ (ПОЛЬЗОВАТЕЛЬ) ---
     testStepHeader('ЧАСТЬ 6: СОЗДАНИЕ И ПРОСМОТР ЗАКАЗА (ПОЛЬЗОВАТЕЛЬ)');
     const cartBeforeOrder = await testRequest('Получение корзины перед заказом', { client: userClient, method: 'GET', path: '/cart', headers: { Authorization: `Bearer ${accessToken}` }, expectedStatus: 200 });
     newOrderByUser = await testRequest('Создание заказа', {
@@ -262,7 +249,6 @@ async function runFullQATests(userClient, adminClient, secondDeviceClient) {
     if (cartAfterOrder.items.length !== 0) throw new Error('Корзина не была очищена после заказа.');
     await testRequest('Получение списка своих заказов', { client: userClient, method: 'GET', path: '/orders', headers: { Authorization: `Bearer ${accessToken}` }, expectedStatus: 200 });
 
-    // --- ЧАСТЬ 7: УПРАВЛЕНИЕ ЗАКАЗАМИ (АДМИН) ---
     testStepHeader('ЧАСТЬ 7: УПРАВЛЕНИЕ ЗАКАЗАМИ (АДМИН)');
     await testRequest('Получение всех заказов', { client: adminClient, method: 'GET', path: '/orders/admin', headers: { Authorization: `Bearer ${adminAccessToken}` }, expectedStatus: 200 });
     await testRequest('Получение заказа по ID', { client: adminClient, method: 'GET', path: `/orders/${newOrderByUser.id}`, headers: { Authorization: `Bearer ${adminAccessToken}` }, expectedStatus: 200 });
@@ -274,7 +260,6 @@ async function runFullQATests(userClient, adminClient, secondDeviceClient) {
         client: adminClient, method: 'DELETE', path: `/orders/${newOrderByUser.id}`, headers: { Authorization: `Bearer ${adminAccessToken}` }, expectedStatus: 200
     });
 
-    // --- ЧАСТЬ 8: УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (АДМИН) ---
     testStepHeader('ЧАСТЬ 8: УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (АДМИН)');
     const userList = await testRequest('Получение списка всех пользователей', { client: adminClient, method: 'GET', path: '/users', headers: { Authorization: `Bearer ${adminAccessToken}` }, expectedStatus: 200 });
     userToDelete = userList.find(u => u.email === userPayload.email);
@@ -284,7 +269,6 @@ async function runFullQATests(userClient, adminClient, secondDeviceClient) {
         data: { name: 'New QA Name' }, expectedStatus: 200
     });
 
-    // --- ЧАСТЬ 9: ПРОДВИНУТАЯ АУТЕНТИФИКАЦИЯ И ПРОФИЛЬ ---
     testStepHeader('ЧАСТЬ 9: ПРОДВИНУТАЯ АУТЕНТИФИКАЦИЯ И ПРОФИЛЬ');
     await testRequest('Обновление своего профиля (имя)', {
         client: userClient, method: 'PATCH', path: '/users/me', headers: { Authorization: `Bearer ${accessToken}` },
@@ -305,9 +289,7 @@ async function runFullQATests(userClient, adminClient, secondDeviceClient) {
     await testRequest('Запрос на сброс пароля', {
         client: userClient, method: 'POST', path: '/auth/forgot-password', data: { email: userPayload.email }, expectedStatus: 200
     });
-    // Эндпоинт /auth/reset-password не может быть полностью протестирован, т.к. требует токен из email.
 
-    // --- ЧАСТЬ 10: ФИНАЛЬНАЯ ОЧИСТКА ---
     testStepHeader('ЧАСТЬ 10: ФИНАЛЬНАЯ ОЧИСТКА');
     await testRequest('Удаление продукта (админ)', { // Удаляем созданный продукт
         client: adminClient, method: 'DELETE', path: `/products/${newProductByAdmin.id}`,

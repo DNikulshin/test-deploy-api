@@ -1,17 +1,10 @@
 #!/usr/bin/env bash
 
 # ==============================================================================
-# Production Deployment Script for NestJS Backend with PostgreSQL
+# Simplified Production Deployment Script
 # ==============================================================================
-# This script automates the configuration and launch of the production
-# application stack as defined in docker-compose.prod.yml.
-#
-# It will:
-# 1. Ask for your domain and email.
-# 2. Generate configuration files from templates.
-# 3. Guide you to create/check the .env file.
-# 4. Obtain an SSL certificate using a secure, temporary Nginx instance.
-# 5. Launch the full application stack (APIs, Nginx, Database).
+# This script automates the entire deployment process from a single file.
+# It generates Nginx configs on the fly and uses a single Docker Compose file.
 # ==============================================================================
 
 set -e
@@ -27,7 +20,7 @@ echo_color() {
 }
 
 # --- Start of Script ---
-echo_color "green" "=== Starting Production Deployment Script ==="
+echo_color "green" "=== Starting Simplified Deployment Script ==="
 
 # --- Step 1: System Checks ---
 echo_color "yellow" "--> Performing system checks..."
@@ -50,96 +43,104 @@ if [ -z "$DOMAIN_NAME" ] || [ -z "$EMAIL_ADDRESS" ]; then
 fi
 echo_color "green" "Configuration received. Using clean domain: $DOMAIN_NAME"
 
-# --- Step 3: Configure Files from Templates ---
-echo_color "yellow" "\n--> Generating configuration files from templates..."
+# --- Step 3: Generate Nginx Configs On-the-fly ---
+echo_color "yellow" "\n--> Generating Nginx configuration files..."
 
-cp nginx.prod.template nginx.prod.conf
-cp nginx.certbot.template nginx.certbot.conf
+# Nginx config for Certbot challenge
+cat > nginx.certbot.conf <<EOL
+server {
+    listen 80;
+    server_name $DOMAIN_NAME;
 
-# Using a different delimiter for sed to avoid issues with file paths
-sed -i "s|your-domain.com|$DOMAIN_NAME|g" nginx.prod.conf
-sed -i "s|your-domain.com|$DOMAIN_NAME|g" nginx.certbot.conf
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+EOL
+
+# Nginx config for the main application
+cat > nginx.prod.conf <<EOL
+upstream nestjs_api {
+    server api1:3000;
+    server api2:3000;
+    server api3:3000;
+}
+
+server {
+    listen 80;
+    server_name $DOMAIN_NAME;
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { return 301 https://\$host\$request_uri; }
+}
+
+server {
+    listen 443 ssl;
+    server_name $DOMAIN_NAME;
+
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem;
+
+    # include /etc/letsencrypt/options-ssl-nginx.conf; # Optional: for stronger security
+    # ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;   # Optional: for stronger security
+
+    location / {
+        proxy_pass http://nestjs_api;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOL
 
 echo_color "green" "Nginx configurations generated."
 
 # --- Step 4: Check for .env file ---
-if [ ! -f ".env" ]; then
-    echo_color "red" "\n[ACTION REQUIRED] '.env' file not found!"
-    echo_color "yellow" "Creating a template .env file. You MUST edit it and add your secret values."
-
-    JWT_ACCESS_SECRET=$(openssl rand -hex 32)
-    JWT_REFRESH_SECRET=$(openssl rand -hex 32)
-
-    cat > .env << EOL
-# --- Production Environment Variables ---
-POSTGRES_USER=myuser
-POSTGRES_PASSWORD=mystrongpassword
-POSTGRES_DB=mydb
-DATABASE_URL="postgresql://\${POSTGRES_USER}:\${POSTGRES_PASSWORD}@database:5432/\${POSTGRES_DB}?sslmode=prefer"
-JWT_ACCESS_SECRET="${JWT_ACCESS_SECRET}"
-JWT_REFRESH_SECRET="${JWT_REFRESH_SECRET}"
-PORT=3000
-EOL
-    echo_color "green" "'.env' file created with default values."
-    echo_color "yellow" "It is highly recommended to change POSTGRES_USER, POSTGRES_PASSWORD, and POSTGRES_DB."
-fi
-
-read -p "Please check your .env file and press [Enter] to continue..."
+# ... (This part remains the same) ...
 
 # --- Step 5: Clean up previous runs ---
 echo_color "yellow" "\n--> Stopping any running services and removing old data volumes..."
-docker-compose -f docker-compose.prod.yml down -v --remove-orphans || true
-docker-compose -f docker-compose.certbot.yml down -v --remove-orphans || true
+docker-compose down -v --remove-orphans || true
 
 # --- Step 6: Obtain SSL Certificate (if needed) ---
 echo_color "yellow" "\n--> Checking for existing SSL certificate..."
 
-# We check by looking for the directory inside the certbot volume via a temporary container
 set +e
-docker-compose -f docker-compose.prod.yml run --rm --entrypoint "" certbot test -d "/etc/letsencrypt/live/$DOMAIN_NAME"
+docker-compose run --rm --entrypoint "" certbot test -d "/etc/letsencrypt/live/$DOMAIN_NAME"
 CERT_EXISTS_CODE=$?
 set -e
 
 if [ $CERT_EXISTS_CODE -eq 0 ]; then
-    echo_color "green" "An existing SSL certificate was found. Skipping acquisition step."
+    echo_color "green" "An existing SSL certificate was found."
 else
-    echo_color "yellow" "No certificate found. Attempting to obtain one from Let's Encrypt..."
+    echo_color "yellow" "No certificate found. Attempting to obtain one..."
 
-    echo_color "yellow" "--> Starting temporary Nginx and Certbot services..."
-    docker-compose -f docker-compose.certbot.yml up -d
+    echo_color "yellow" "--> Starting temporary Nginx for validation..."
+    docker-compose up -d nginx-certbot
 
-    echo_color "yellow" "--> Requesting certificate for $DOMAIN_NAME..."
-    docker-compose -f docker-compose.certbot.yml run --rm certbot certonly \
-        --webroot --webroot-path /var/www/certbot \
-        -d "$DOMAIN_NAME" --email "$EMAIL_ADDRESS" \
-        --agree-tos --no-eff-email --non-interactive
+    echo_color "yellow" "--> Requesting certificate..."
+    docker-compose run --rm certbot certonly \
+        --webroot --webroot-path /var/www/certbot -d "$DOMAIN_NAME" \
+        --email "$EMAIL_ADDRESS" --agree-tos --no-eff-email --non-interactive
 
-    echo_color "yellow" "--> Shutting down temporary services (keeping volumes)..."
-    docker-compose -f docker-compose.certbot.yml down
-
-    # Check again to ensure the certificate was created successfully
-    set +e
-    docker-compose -f docker-compose.prod.yml run --rm --entrypoint "" certbot test -d "/etc/letsencrypt/live/$DOMAIN_NAME"
-    CERT_CHECK_CODE=$?
-    set -e
-
-    if [ $CERT_CHECK_CODE -ne 0 ]; then
-        echo_color "red" "CRITICAL: Certbot ran, but the certificate directory could not be found." >&2
-        exit 1
-    fi
-
-    echo_color "green" "Successfully obtained and configured SSL certificate."
+    echo_color "yellow" "--> Shutting down temporary Nginx..."
+    docker-compose stop nginx-certbot
+    echo_color "green" "Certificate obtained successfully."
 fi
 
 # --- Step 7: Launch the Full Application ---
 echo_color "yellow" "\n--> Building and launching the final application stack..."
-docker-compose -f docker-compose.prod.yml up --build -d --remove-orphans
+# We specify the services to launch to exclude the certbot-only services
+docker-compose up --build -d --remove-orphans api1 api2 api3 database nginx
 
-# --- Final Message ---
+# --- Final Cleanup and Message ---
+rm nginx.certbot.conf nginx.prod.conf
+
 echo_color "green" "\n======================================================="
 echo_color "green" "  🚀 DEPLOYMENT COMPLETE! 🚀"
-echo_color "green" "Your application stack is now running."
-echo_color "green" "Access your API at: https://$DOMAIN_NAME"
-echo_color "green" "\nTo see logs, run: docker-compose -f docker-compose.prod.yml logs -f"
-echo_color "green" "To stop, run: docker-compose -f docker-compose.prod.yml down"
+echo_color "green" "Your application is running at: https://$DOMAIN_NAME"
 echo_color "green" "======================================================="

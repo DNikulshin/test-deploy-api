@@ -1,49 +1,98 @@
+version: '3.8'
 
 services:
-  main-db:
-    image: postgres
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
-    volumes:
-      - main-db:/var/lib/postgresql
-    networks:
-      - app-network
-
-  api:
+  # ===============================================
+  # Production Services
+  # ===============================================
+  api1:
     build:
       context: .
       dockerfile: Dockerfile
-    # Docker-compose автоматически подхватит эти переменные из вашего .env файла
-    # и передаст их в контейнер.
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@main-db:5432/postgres
-      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
-      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
-    depends_on:
-      - main-db
+    restart: unless-stopped
+    env_file: .env
     networks:
-      - app-network
-    deploy:
-      replicas: 3
+      - default
+
+  api2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - default
+
+  api3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - default
+
+  database:
+    image: postgres:14-alpine
+    container_name: test-deploy-api_database_1
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - default
 
   nginx:
     image: nginx:latest
+    container_name: test-deploy-api_nginx_1
+    restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "80:80"
+      - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx.prod.conf:/etc/nginx/conf.d/default.conf
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
     depends_on:
-      - api
+      - api1
+      - api2
+      - api3
     networks:
-      - app-network
+      - default
 
-networks:
-  app-network:
-    driver: bridge
+  # ===============================================
+  # Certificate Acquisition Services
+  # These are not part of the main application stack.
+  # ===============================================
+  nginx-certbot:
+    image: nginx:latest
+    container_name: test-deploy-api_nginx-certbot_1
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.certbot.conf:/etc/nginx/conf.d/default.conf
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    networks:
+      - default
+
+  certbot:
+    image: certbot/certbot
+    container_name: test-deploy-api_certbot_1
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    depends_on:
+      - nginx-certbot
+    networks:
+      - default
 
 volumes:
-  main-db:
+  pgdata:
+  certbot_conf:
+  certbot_www:
+
+networks:
+  default:
+    driver: bridge

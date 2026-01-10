@@ -1,5 +1,6 @@
 const PORT = 3000;
 const DOCKER_SERVICE_NAME = 'main-db';
+const DOCKER_COMPOSE_FILE = 'docker-compose.dev.yml';
 
 // --- Утилиты для логирования ---
 const log = (message) => console.log(`[run-dev] ${message}`);
@@ -18,13 +19,27 @@ async function main() {
       const result = await execa(command, args, { stdio: 'inherit', ...options });
       return { ...result, success: true };
     } catch (error) {
-      // Не считаем ошибкой, если процесс был убит внешним сигналом
-      if (error.isTerminated) return { ...error, success: true, killed: true };
-      
+      if (error.isTerminated) return { ...result, success: true, killed: true };
       logError(`Ошибка при выполнении: ${command} ${args.join(' ')}`);
       return { ...error, success: false };
     }
   };
+  
+    // --- Функция для вывода логов Docker при ошибке ---
+  const showDockerLogsOnError = async (serviceName, composeArgs) => {
+    logError(`Попытка получить логи для сервиса '${serviceName}'...`);
+    try {
+      const { stdout, stderr } = await execa('docker-compose', [...composeArgs, 'logs', '--tail=100', serviceName]);
+      logSeparator();
+      logError(`ЛОГИ DOCKER-КОНТЕЙНЕРА ('${serviceName}'):`);
+      console.error(stdout);
+      if (stderr) console.error(stderr);
+      logSeparator();
+    } catch (logError) {
+      logError(`Не удалось получить логи для сервиса '${serviceName}': ${logError.message}`);
+    }
+  };
+
 
   // --- 1. Освобождение порта ---
   async function freePort() {
@@ -49,23 +64,30 @@ async function main() {
   // --- 2. Ожидание готовности базы данных ---
   async function ensureDbReady() {
     logSeparator();
-    log('Проверка и запуск Docker-контейнера базы данных...');
-
-    const { stdout: psOutput } = await execa('docker-compose', ['ps', '-q', DOCKER_SERVICE_NAME]);
-
-    if (!psOutput) {
-      log(`Контейнер '${DOCKER_SERVICE_NAME}' не запущен. Запускаем...`);
-      const upResult = await runCommand('docker-compose', ['up', '-d', DOCKER_SERVICE_NAME]);
-      if (!upResult.success) return false;
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    } else {
-      log(`Контейнер '${DOCKER_SERVICE_NAME}' уже запущен.`);
+    log('Полная очистка Docker-окружения для чистого запуска...');
+    const dockerComposeArgs = ['-f', DOCKER_COMPOSE_FILE];
+    
+    // 1. Всегда останавливаем и удаляем старые контейнеры/тома
+    await runCommand('docker-compose', [...dockerComposeArgs, 'down', '-v']);
+    
+    logSeparator();
+    log('Запуск Docker-контейнера базы данных...');
+    
+    // 2. Запускаем новый контейнер
+    const upResult = await runCommand('docker-compose', [...dockerComposeArgs, 'up', '-d', DOCKER_SERVICE_NAME]);
+    if (!upResult.success) {
+        logError('Не удалось выполнить docker-compose up.');
+        return false;
     }
+    
+    // Даем немного времени на первоначальный запуск
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
     log('Ожидание доступности Postgres...');
     for (let i = 0; i < 30; i++) {
+        log(`Попытка подключения к БД (попытка ${i + 1}/30)...`);
       try {
-        await execa('docker-compose', ['exec', '-T', DOCKER_SERVICE_NAME, 'pg_isready', '-U', 'postgres', '-q'], { stdio: 'ignore' });
+        await execa('docker-compose', [...dockerComposeArgs, 'exec', '-T', DOCKER_SERVICE_NAME, 'pg_isready', '-U', 'postgres', '-q'], { stdio: 'ignore' });
         log('База данных готова.');
         return true;
       } catch (e) {
@@ -74,6 +96,7 @@ async function main() {
     }
 
     logError('База данных не стала доступной после 60 секунд ожидания.');
+    await showDockerLogsOnError(DOCKER_SERVICE_NAME, dockerComposeArgs);
     return false;
   }
 
@@ -92,11 +115,9 @@ async function main() {
     logSeparator();
     log('Запуск NestJS приложения в режиме разработки...');
     
-    // execa по умолчанию корректно обрабатывает завершение дочернего процесса
     await execa('npm', ['run', 'start', '--', '--watch'], { stdio: 'inherit' });
 
   } catch (error) {
-    // Логируем ошибку только если процесс не был штатно завершен (например, по Ctrl+C)
     if (error.isTerminated) {
       log('Сервер разработки остановлен.');
     } else {
