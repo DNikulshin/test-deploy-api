@@ -13,7 +13,7 @@ services:
     depends_on:
       - database
     command: >
-      sh -c "npx prisma migrate deploy && node dist/src/main.js"
+      sh -c "npx prisma migrate deploy && npm run db:seed:admin && node dist/src/main.js"
 
   api2:
     build:
@@ -27,7 +27,7 @@ services:
     depends_on:
       - database
     command: >
-      sh -c "npx prisma migrate deploy && node dist/src/main.js"
+      sh -c "npx prisma migrate deploy && npm run db:seed:admin && node dist/src/main.js"
 
   api3:
     build:
@@ -41,7 +41,7 @@ services:
     depends_on:
       - database
     command: >
-      sh -c "npx prisma migrate deploy && node dist/src/main.js"
+      sh -c "npx prisma migrate deploy && npm run db:seed:admin && node dist/src/main.js"
 
   nginx:
     image: nginx:latest
