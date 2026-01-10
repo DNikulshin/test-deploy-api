@@ -12,13 +12,16 @@ async function main() {
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@admin.ru' },
+    // By leaving `update` empty, we ensure that if the admin already exists,
+    // their password is not reset on every application restart.
     update: {},
     create: {
       email: 'admin@admin.ru',
       name: 'admin',
       passwordHash: hashedPassword,
       role: Role.ADMIN,
-      passwordChangeRequired: , // In production, we might not want to force a password change immediately.
+      // Force password change on first login for security.
+      passwordChangeRequired: true,
     },
   });
 
