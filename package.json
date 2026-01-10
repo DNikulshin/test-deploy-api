@@ -22,7 +22,8 @@
     "prisma:prod:migrate": "dotenv -e .env.production -- prisma migrate deploy",
     "prisma:dev:generate": "dotenv -e .env.development -- prisma generate",
     "prisma:prod:generate": "dotenv -e .env.production -- prisma generate",
-    "prisma:seed": "dotenv -e .env.development -- ts-node prisma/seed.ts",
+    "db:seed:all": "dotenv -e .env.development -- ts-node prisma/seed.ts",
+    "db:seed:admin": "ts-node prisma/seed-admin.ts",
     "test:qa": "node test-qa.js"
   },
   "prisma": {
