@@ -40,13 +40,8 @@ echo_color "green" "=== Starting Production Deployment Script ==="
 # --- Step 1: Sanity Checks ---
 echo_color "yellow" "--> Performing system checks..."
 
-if ! [ -x "$(command -v docker)" ] || ! docker compose version &>/dev/null; then
-    echo_color "red" "Error: Docker and/or Docker Compose V2 are not installed."
-    exit 1
-fi
-
-if [ ! -f "docker-compose.prod.yml" ] || [ ! -f "nginx.prod.conf" ]; then
-    echo_color "red" "Error: Critical files not found. Run from the 'backend' directory."
+if ! [ -x "$(command -v docker)" ] || ! [ -x "$(command -v docker-compose)" ]; then
+    echo_color "red" "Error: Docker and/or Docker Compose are not installed."
     exit 1
 fi
 
