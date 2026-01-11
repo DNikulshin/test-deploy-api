@@ -103,8 +103,9 @@ echo_color "green" "Nginx configurations generated."
 # ... (This part remains the same) ...
 
 # --- Step 5: Clean up previous runs ---
-echo_color "yellow" "\n--> Stopping any running services and removing old data volumes..."
-docker-compose down -v --remove-orphans || true
+echo_color "yellow" "\n--> Stopping any running services..."
+# IMPORTANT: Removed the -v flag to prevent deleting the SSL certificate volumes
+docker-compose down --remove-orphans || true
 
 # --- Step 6: Obtain SSL Certificate (if needed) ---
 echo_color "yellow" "\n--> Checking for existing SSL certificate..."
