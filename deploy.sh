@@ -110,12 +110,13 @@ docker-compose down -v --remove-orphans || true
 echo_color "yellow" "\n--> Checking for existing SSL certificate..."
 
 set +e
-docker-compose run --rm --entrypoint "" certbot test -d "/etc/letsencrypt/live/$DOMAIN_NAME"
+# Correctly check for the certificate directory inside the certbot container volume
+docker-compose run --rm --entrypoint "test -d /etc/letsencrypt/live/$DOMAIN_NAME" certbot
 CERT_EXISTS_CODE=$?
 set -e
 
 if [ $CERT_EXISTS_CODE -eq 0 ]; then
-    echo_color "green" "An existing SSL certificate was found."
+    echo_color "green" "An existing SSL certificate was found. Skipping certificate request."
 else
     echo_color "yellow" "No certificate found. Attempting to obtain one..."
 
