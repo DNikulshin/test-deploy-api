@@ -35,6 +35,9 @@ COPY --from=builder /usr/src/app/package*.json ./
 COPY --from=builder /usr/src/app/node_modules ./node_modules
 COPY --from=builder /usr/src/app/dist ./dist
 
+# Копируем .env файл, чтобы ConfigModule мог его прочитать
+COPY .env ./
+
 # Prisma также требует наличия файла схемы во время выполнения
 COPY --from=builder /usr/src/app/prisma ./prisma
 COPY --from=builder /usr/src/app/package.json ./
