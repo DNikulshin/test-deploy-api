@@ -5,10 +5,14 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
   constructor(private readonly config: ConfigService) {
+    const databaseUrl = config.get<string>('config.databaseUrl');
+    // --- DIAGNOSTIC LOG ---
+    console.log(`[PrismaService] Attempting to connect with URL: ${databaseUrl}`);
+    // ---------------------
     super({
       datasources: {
         db: {
-          url: config.get<string>('config.databaseUrl'),
+          url: databaseUrl,
         },
       },
     });
@@ -19,15 +23,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   }
 
   async cleanDb() {
-    // Порядок удаления важен из-за внешних ключей.
-    // Сначала удаляем записи из связующих таблиц.
-    return this.$transaction([
-      this.orderProductItem.deleteMany(),
-      this.cartItem.deleteMany(),
-      this.order.deleteMany(),
-      this.product.deleteMany(),
-      this.cart.deleteMany(),
-      this.user.deleteMany(),
-    ]);
+    // ...
   }
 }
