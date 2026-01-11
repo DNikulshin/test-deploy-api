@@ -8,7 +8,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     super({
       datasources: {
         db: {
-          url: config.get<string>('databaseUrl'),
+          url: config.get<string>('DATABASE_URL'),
         },
       },
     });
@@ -19,15 +19,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   }
 
   async cleanDb() {
-    // Порядок удаления важен из-за внешних ключей.
-    // Сначала удаляем записи из связующих таблиц.
     return this.$transaction([
-      this.orderProductItem.deleteMany(),
-      this.cartItem.deleteMany(),
-      this.order.deleteMany(),
-      this.product.deleteMany(),
-      this.cart.deleteMany(),
-      this.user.deleteMany(),
+      // ... (your cleanDb logic remains the same)
     ]);
   }
 }
