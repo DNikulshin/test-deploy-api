@@ -3,13 +3,20 @@ FROM node:20-alpine as builder
 
 WORKDIR /usr/src/app
 
+# Объявляем аргумент сборки, чтобы Docker мог принять его из docker-compose
+ARG DATABASE_URL
+
+# Устанавливаем переменную окружения ВНУТРИ сборочного слоя
+# Теперь все последующие RUN-команды будут "видеть" этот URL
+ENV DATABASE_URL=$DATABASE_URL
+
 # Копируем package.json и lock-файл
 COPY package*.json ./
 
 # Копируем схему Prisma ДО установки зависимостей.
 COPY prisma ./prisma
 
-# Устанавливаем зависимости. Prisma Client будет сгенерирован здесь.
+# Устанавливаем зависимости. Prisma Client будет сгенерирован здесь, используя DATABASE_URL.
 RUN npm install
 
 # Копируем остальной код приложения
