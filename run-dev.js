@@ -115,7 +115,7 @@ async function main() {
     logSeparator();
     log('Запуск NestJS приложения в режиме разработки...');
     
-    await execa('npm', ['run', 'start', '--', '--watch'], { stdio: 'inherit' });
+    await execa('npm', ['run', 'start', '--', '--watch'], { stdio: 'inherit', env: { ...process.env, NODE_ENV: 'development' } });
 
   } catch (error) {
     if (error.isTerminated) {
